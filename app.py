@@ -86,9 +86,6 @@ def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.radio("Go to", ["📊 Data Overview", "🔍 Recommendations", "📈 Evaluation", "⚙️ Settings"])
     
-    # Always load data
-    tracks_df, ratings_df = load_or_create_data()
-    
     if page == "📊 Data Overview":
         show_data_overview(tracks_df, ratings_df)
     elif page == "🔍 Recommendations":
@@ -307,17 +304,19 @@ def show_evaluation(tracks_df, ratings_df, cbf, collab, hybrid, preprocessor, us
     # --- Precision@K / Recall@K ---
     st.subheader("📊 Ranking Metrics (Precision@K / Recall@K)")
     
-    # Build ground truth: items rated 4+ by each user
+    # Build ground truth from HELD-OUT (test) ratings: items rated 4+ by each user.
+    # Using test data avoids overlap with recommendations, which exclude already-rated tracks.
     ground_truth = {}
-    for u in train_ratings["user_id"].unique():
-        user_ratings = train_ratings[train_ratings["user_id"] == u]
+    for u in eval_ratings["user_id"].unique():
+        user_ratings = eval_ratings[eval_ratings["user_id"] == u]
         liked = set(user_ratings[user_ratings["rating"] >= 4]["track_id"].tolist())
         if liked:
             ground_truth[u] = liked
     
     # Generate recommendations for each user
     k = st.slider("K value for Precision/Recall", 3, 20, 10)
-    recommended_items = {}
+    cf_recommended = {}
+    hybrid_recommended = {}
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -325,44 +324,40 @@ def show_evaluation(tracks_df, ratings_df, cbf, collab, hybrid, preprocessor, us
     for i, u in enumerate(ground_truth.keys()):
         # CF recommendations
         cf_recs = collab_eval.recommend_for_user(u, tracks_df, top_k=k, filter_already_rated=True)
-        rec_ids = cf_recs["track_id"].tolist()
-        recommended_items[f"CF_{u}"] = rec_ids
+        cf_recommended[u] = cf_recs["track_id"].tolist()
         
         # Hybrid recommendations
         hybrid_recs = hybrid_eval.recommend(user_id=u, tracks_df=tracks_df, top_k=k)
-        hybrid_rec_ids = hybrid_recs["track_id"].tolist()
-        recommended_items[f"Hybrid_{u}"] = hybrid_rec_ids
+        hybrid_recommended[u] = hybrid_recs["track_id"].tolist()
         
         progress_bar.progress((i + 1) / len(ground_truth))
         status_text.text(f"Evaluating user {i+1}/{len(ground_truth)}...")
     
     # Calculate metrics
-    # Precision@K and Recall@K for CF
-    prec_cf, rec_cf = calculate_precision_recall_at_k(ground_truth, recommended_items, k=k)
-    # Precision@K and Recall@K for Hybrid
-    # Need to extract just the recommended lists
-    hybrid_rec_lists = {k.split("_", 1)[1]: v for k, v in recommended_items.items() if k.startswith("Hybrid_")}
-    # Need ground truth keys matching - simplify
-    # Actually let's just compute for the first few users for demo
+    prec_cf, rec_cf = calculate_precision_recall_at_k(ground_truth, cf_recommended, k=k)
+    prec_hyb, rec_hyb = calculate_precision_recall_at_k(ground_truth, hybrid_recommended, k=k)
+    map_cf = calculate_map_at_k(ground_truth, cf_recommended, k=k)
+    map_hyb = calculate_map_at_k(ground_truth, hybrid_recommended, k=k)
     
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Precision@K (CF)", f"{prec_cf:.3f}")
+        st.metric("Precision@K (Hybrid)", f"{prec_hyb:.3f}")
     with col2:
         st.metric("Recall@K (CF)", f"{rec_cf:.3f}")
+        st.metric("Recall@K (Hybrid)", f"{rec_hyb:.3f}")
     with col3:
-        # Simple MAP approximation
-        map_k = calculate_map_at_k(ground_truth, recommended_items, k=k)
-        st.metric("MAP@K", f"{map_k:.3f}")
+        st.metric("MAP@K (CF)", f"{map_cf:.3f}")
+        st.metric("MAP@K (Hybrid)", f"{map_hyb:.3f}")
     
     # Catalog Coverage
     total_tracks = set(tracks_df["track_id"].tolist())
-    coverage = calculate_catalog_coverage(recommended_items, total_tracks)
+    coverage = calculate_catalog_coverage(cf_recommended, total_tracks)
     st.metric("Catalog Coverage", f"{coverage:.1%}")
     
     # Intra-List Diversity
     ild = calculate_intra_list_diversity(
-        recommended_items.get("CF_USR001", []),
+        cf_recommended.get(next(iter(ground_truth), ""), []),
         feature_matrix,
         track_to_idx_eval
     )
@@ -416,7 +411,7 @@ def show_settings(tracks_df, ratings_df, hybrid, user_to_idx, track_to_idx):
         with st.spinner("Retraining models..."):
             # Reinitialize with new params
             st.success("Models retrained successfully!")
-            st.experimental_rerun()
+            st.rerun()
 
 if __name__ == "__main__":
     main()
