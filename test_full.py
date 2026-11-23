@@ -1,12 +1,21 @@
 """Full system test."""
+from pathlib import Path
 import sys
-sys.path.insert(0, r"C:\Users\Laptopkaran\Documents\Default Project\Music Recommendation System")
+
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from src.data_loader import load_or_create_data
 from src.preprocessing import DataPreprocessor
 from src.recommender import ContentBasedRecommender, CollaborativeRecommender, HybridRecommender
-from src.evaluate import calculate_rmse_mae, calculate_precision_recall_at_k, calculate_map_at_k, calculate_catalog_coverage, calculate_intra_list_diversity
-import pandas as pd
+from src.evaluate import (
+    calculate_rmse_mae,
+    calculate_precision_recall_at_k,
+    calculate_map_at_k,
+    calculate_catalog_coverage,
+    calculate_intra_list_diversity,
+)
 import numpy as np
 
 print("=" * 60)
@@ -51,27 +60,27 @@ print(f"   Evaluation: RMSE={rmse:.3f}, MAE={mae:.3f} OK")
 prec, rec = calculate_precision_recall_at_k(
     {"USR001": {"TRK0001", "TRK0002", "TRK0003"}},
     {"USR001": ["TRK0001", "TRK0002", "TRK0004"]},
-    k=3
+    k=3,
 )
 print(f"   Metrics: Precision@3={prec:.3f}, Recall@3={rec:.3f} OK")
 
 map_k = calculate_map_at_k(
     {"USR001": {"TRK0001", "TRK0002", "TRK0003"}},
     {"USR001": ["TRK0001", "TRK0002", "TRK0004"]},
-    k=3
+    k=3,
 )
 print(f"   Metrics: MAP@3={map_k:.3f} OK")
 
 coverage = calculate_catalog_coverage(
     {"USR001": ["TRK0001", "TRK0002", "TRK0003", "TRK0004", "TRK0005"]},
-    set(tracks["track_id"].tolist())
+    set(tracks["track_id"].tolist()),
 )
 print(f"   Coverage: {coverage:.1%} of catalog covered OK")
 
 ild = calculate_intra_list_diversity(
     ["TRK0001", "TRK0003", "TRK0005"],
     feature_matrix,
-    track_to_idx
+    track_to_idx,
 )
 print(f"   Diversity: Intra-List Diversity (ILD)={ild:.3f} OK")
 
