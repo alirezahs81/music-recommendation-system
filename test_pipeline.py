@@ -1,6 +1,10 @@
 """Quick pipeline test script."""
+from pathlib import Path
 import sys
-sys.path.insert(0, r"C:\Users\Laptopkaran\Documents\Default Project\Music Recommendation System")
+
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from src.data_loader import load_or_create_data
 from src.preprocessing import DataPreprocessor
